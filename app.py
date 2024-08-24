@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from xgboost import XGBRegressor  # type: ignore
+from xgboost import XGBRegressor  # Ensure this is the CPU version
 import joblib
 
 # Load the model and encoders (if needed)
 @st.cache_resource
 def load_model():
-    return joblib.load('xgb_model_current_version.pkl')
+    return joblib.load('xgb_model_current_version.pkl')  # Updated model filename
 
 model = load_model()
 
@@ -61,7 +61,7 @@ if 'date' in oil.columns:
     oil['date'] = pd.to_datetime(oil['date'])
     input_data['date'] = pd.to_datetime(input_data['date'])
     input_data = pd.merge(input_data, oil, on='date', how='left')
-    input_data['dcoilwtico'].fillna(method='ffill', inplace=True)
+    input_data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
 else:
     st.warning("'date' column not found in 'oil.csv'.")
 
@@ -131,7 +131,7 @@ if uploaded_file is not None:
         data['date'] = pd.to_datetime(data['date'])
         data = pd.merge(data, stores, on='store_nbr', how='left')
         data = pd.merge(data, oil, on='date', how='left')
-        data['dcoilwtico'].fillna(method='ffill', inplace=True)
+        data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
 
         for col in categorical_cols:
             if col in data.columns:
