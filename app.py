@@ -8,7 +8,7 @@ import joblib
 # Load the model and encoders (if needed)
 @st.cache_resource
 def load_model():
-    return joblib.load('xgb_model.pkl')
+    return joblib.load('xgb_model_current_version.pkl')
 
 model = load_model()
 
