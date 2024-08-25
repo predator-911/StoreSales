@@ -22,11 +22,6 @@ st.subheader('Input Features')
 # Input fields for user
 store_nbr = st.number_input('Store Number', min_value=1, max_value=50, value=1)
 family = st.selectbox('Family', ['FOOD', 'HOBBIES', 'HOME', 'ELECTRONICS', 'CLOTHING'])
-city = st.text_input('City')
-state = st.text_input('State')
-type_ = st.selectbox('Store Type', ['A', 'B', 'C'])  # Ensure 'type' exists in your data
-locale = st.selectbox('Locale', ['CITY', 'STATE'])
-locale_name = st.text_input('Locale Name')
 date = st.date_input('Date')
 
 # Load additional data for encoding and merging
@@ -34,26 +29,40 @@ stores = pd.read_csv('stores.csv')
 oil = pd.read_csv('oil.csv')
 holidays_events = pd.read_csv('holidays_events.csv')
 
-# Convert 'date' columns to datetime
-oil['date'] = pd.to_datetime(oil['date'])
-holidays_events['date'] = pd.to_datetime(holidays_events['date'])
-
 # Prepare the input data
 input_data = pd.DataFrame({
     'store_nbr': [store_nbr],
     'family': [family],
-    'city': [city],
-    'state': [state],
-    'type': [type_],
-    'locale': [locale],
-    'locale_name': [locale_name],
     'date': [pd.to_datetime(date)]
 })
 
+# Check available columns in the loaded data files
+st.write("Columns in 'stores.csv':", stores.columns)
+st.write("Columns in 'oil.csv':", oil.columns)
+st.write("Columns in 'holidays_events.csv':", holidays_events.columns)
+
 # Merge data
-input_data = pd.merge(input_data, stores, on='store_nbr', how='left')
-input_data = pd.merge(input_data, oil, on='date', how='left')
-input_data['dcoilwtico'].ffill(inplace=True)
+if 'store_nbr' in stores.columns:
+    input_data = pd.merge(input_data, stores, on='store_nbr', how='left')
+else:
+    st.warning("'store_nbr' column not found in 'stores.csv'.")
+
+if 'date' in oil.columns:
+    oil['date'] = pd.to_datetime(oil['date'])
+    input_data['date'] = pd.to_datetime(input_data['date'])
+    input_data = pd.merge(input_data, oil, on='date', how='left')
+    input_data['dcoilwtico'].ffill(inplace=True)
+else:
+    st.warning("'date' column not found in 'oil.csv'.")
+
+# Encode categorical features
+le = LabelEncoder()
+categorical_cols = ['family']
+for col in categorical_cols:
+    if col in input_data.columns:
+        input_data[col] = le.fit_transform(input_data[col])
+    else:
+        st.warning(f"'{col}' column not found in the input data.")
 
 # Create date features
 def create_date_features(df):
@@ -64,44 +73,25 @@ def create_date_features(df):
     df['is_weekend'] = df['dayofweek'] >= 5
     return df
 
-# Apply the function to create the date features
 input_data = create_date_features(input_data)
 
 # Incorporate holidays and events information
-holidays_events = holidays_events[holidays_events['transferred'] == 'False']
-holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
-holidays_events['is_holiday'] = 1
+if 'date' in holidays_events.columns:
+    holidays_events['date'] = pd.to_datetime(holidays_events['date'])
+    holidays_events = holidays_events[holidays_events['transferred'] == 'False']
+    holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
+    holidays_events['is_holiday'] = 1
 
-input_data = pd.merge(input_data, holidays_events, on=['date'], how='left')
-input_data['is_holiday'].fillna(0, inplace=True)
-
-# Rename columns to match the model's expected feature names
-input_data.rename(columns={
-    'type': 'type_x',
-    'city': 'city_x',
-    'state': 'state_x',
-    'locale': 'locale_x',
-    'locale_name': 'locale_name_x'
-}, inplace=True)
-
-# Drop any columns not expected by the model
-input_data = input_data[[
-    'store_nbr', 'family', 'city_x', 'state_x', 'type_x', 'locale_x',
-    'locale_name_x', 'cluster', 'dcoilwtico', 'year', 'month', 'day', 
-    'dayofweek', 'is_weekend', 'is_holiday'
-]]
-
-# Encode categorical features
-le = LabelEncoder()
-categorical_cols = ['family', 'locale_x', 'locale_name_x']
-for col in categorical_cols:
-    input_data[col] = le.fit_transform(input_data[col])
+    input_data = pd.merge(input_data, holidays_events, on='date', how='left')
+    input_data['is_holiday'].fillna(0, inplace=True)
+else:
+    st.warning("'date' column not found in 'holidays_events.csv'.")
 
 # Ensure all columns are numerical
 input_data = input_data.apply(pd.to_numeric, errors='coerce')
 
 # Prepare the data for prediction
-X_input = input_data.drop(['date'], axis=1, errors='ignore')
+X_input = input_data.drop(['date', 'type', 'locale', 'locale_name'], axis=1, errors='ignore')
 
 # Predict using the model
 if st.button('Predict Sales'):
@@ -129,26 +119,21 @@ if uploaded_file is not None:
     
     # Process the uploaded file similar to the user input
     if 'date' in data.columns:
-        data['date'] = pd.to_datetime(data['date'])  # Convert uploaded dates to datetime
+        data['date'] = pd.to_datetime(data['date'])
         data = pd.merge(data, stores, on='store_nbr', how='left')
         data = pd.merge(data, oil, on='date', how='left')
         data['dcoilwtico'].ffill(inplace=True)
 
+        for col in categorical_cols:
+            if col in data.columns:
+                data[col] = le.fit_transform(data[col])
+        
         data = create_date_features(data)
         data = pd.merge(data, holidays_events, on=['date'], how='left')
         data['is_holiday'].fillna(0, inplace=True)
-
-        data.rename(columns={
-            'type': 'type_x',
-            'city': 'city_x',
-            'state': 'state_x',
-            'locale': 'locale_x',
-            'locale_name': 'locale_name_x'
-        }, inplace=True)
-
         data = data.apply(pd.to_numeric, errors='coerce')
         
-        X_batch = data.drop(['date'], axis=1, errors='ignore')
+        X_batch = data.drop(['date', 'type', 'locale', 'locale_name'], axis=1, errors='ignore')
         predictions_batch = model.predict(X_batch)
 
         results_batch = pd.DataFrame({
