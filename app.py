@@ -44,16 +44,36 @@ input_data = pd.DataFrame({
     'family': [family],
     'city': [city],
     'state': [state],
-    'type': [type_],  # Ensure 'type' exists in your data
+    'type': [type_],
     'locale': [locale],
     'locale_name': [locale_name],
-    'date': [pd.to_datetime(date)]  # Convert user input date to datetime
+    'date': [pd.to_datetime(date)]
 })
 
 # Merge data
 input_data = pd.merge(input_data, stores, on='store_nbr', how='left')
 input_data = pd.merge(input_data, oil, on='date', how='left')
-input_data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
+input_data['dcoilwtico'].ffill(inplace=True)
+
+# Create date features
+def create_date_features(df):
+    df['year'] = df['date'].dt.year
+    df['month'] = df['date'].dt.month
+    df['day'] = df['date'].dt.day
+    df['dayofweek'] = df['date'].dt.dayofweek
+    df['is_weekend'] = df['dayofweek'] >= 5
+    return df
+
+# Apply the function to create the date features
+input_data = create_date_features(input_data)
+
+# Incorporate holidays and events information
+holidays_events = holidays_events[holidays_events['transferred'] == 'False']
+holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
+holidays_events['is_holiday'] = 1
+
+input_data = pd.merge(input_data, holidays_events, on=['date'], how='left')
+input_data['is_holiday'].fillna(0, inplace=True)
 
 # Rename columns to match the model's expected feature names
 input_data.rename(columns={
@@ -76,25 +96,6 @@ le = LabelEncoder()
 categorical_cols = ['family', 'locale_x', 'locale_name_x']
 for col in categorical_cols:
     input_data[col] = le.fit_transform(input_data[col])
-
-# Create date features
-def create_date_features(df):
-    df['year'] = df['date'].dt.year
-    df['month'] = df['date'].dt.month
-    df['day'] = df['date'].dt.day
-    df['dayofweek'] = df['date'].dt.dayofweek
-    df['is_weekend'] = df['dayofweek'] >= 5
-    return df
-
-input_data = create_date_features(input_data)
-
-# Incorporate holidays and events information
-holidays_events = holidays_events[holidays_events['transferred'] == 'False']
-holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
-holidays_events['is_holiday'] = 1
-
-input_data = pd.merge(input_data, holidays_events, on=['date'], how='left')
-input_data['is_holiday'].fillna(0, inplace=True)
 
 # Ensure all columns are numerical
 input_data = input_data.apply(pd.to_numeric, errors='coerce')
@@ -133,6 +134,10 @@ if uploaded_file is not None:
         data = pd.merge(data, oil, on='date', how='left')
         data['dcoilwtico'].ffill(inplace=True)
 
+        data = create_date_features(data)
+        data = pd.merge(data, holidays_events, on=['date'], how='left')
+        data['is_holiday'].fillna(0, inplace=True)
+
         data.rename(columns={
             'type': 'type_x',
             'city': 'city_x',
@@ -141,9 +146,6 @@ if uploaded_file is not None:
             'locale_name': 'locale_name_x'
         }, inplace=True)
 
-        data = create_date_features(data)
-        data = pd.merge(data, holidays_events, on=['date'], how='left')
-        data['is_holiday'].fillna(0, inplace=True)
         data = data.apply(pd.to_numeric, errors='coerce')
         
         X_batch = data.drop(['date'], axis=1, errors='ignore')
