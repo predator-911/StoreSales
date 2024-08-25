@@ -34,6 +34,10 @@ stores = pd.read_csv('stores.csv')
 oil = pd.read_csv('oil.csv')
 holidays_events = pd.read_csv('holidays_events.csv')
 
+# Convert 'date' columns to datetime
+oil['date'] = pd.to_datetime(oil['date'])
+holidays_events['date'] = pd.to_datetime(holidays_events['date'])
+
 # Prepare the input data
 input_data = pd.DataFrame({
     'store_nbr': [store_nbr],
@@ -43,7 +47,7 @@ input_data = pd.DataFrame({
     'type': [type_],  # Ensure 'type' exists in your data
     'locale': [locale],
     'locale_name': [locale_name],
-    'date': [pd.to_datetime(date)]
+    'date': [pd.to_datetime(date)]  # Convert user input date to datetime
 })
 
 # Merge data
@@ -124,7 +128,7 @@ if uploaded_file is not None:
     
     # Process the uploaded file similar to the user input
     if 'date' in data.columns:
-        data['date'] = pd.to_datetime(data['date'])
+        data['date'] = pd.to_datetime(data['date'])  # Convert uploaded dates to datetime
         data = pd.merge(data, stores, on='store_nbr', how='left')
         data = pd.merge(data, oil, on='date', how='left')
         data['dcoilwtico'].ffill(inplace=True)
