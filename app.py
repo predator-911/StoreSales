@@ -46,33 +46,32 @@ input_data = pd.DataFrame({
     'date': [pd.to_datetime(date)]
 })
 
-# Check available columns in the loaded data files
-st.write("Columns in 'stores.csv':", stores.columns)
-st.write("Columns in 'oil.csv':", oil.columns)
-st.write("Columns in 'holidays_events.csv':", holidays_events.columns)
-
 # Merge data
-if 'store_nbr' in stores.columns:
-    input_data = pd.merge(input_data, stores, on='store_nbr', how='left')
-else:
-    st.warning("'store_nbr' column not found in 'stores.csv'.")
+input_data = pd.merge(input_data, stores, on='store_nbr', how='left')
+input_data = pd.merge(input_data, oil, on='date', how='left')
+input_data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
 
-if 'date' in oil.columns:
-    oil['date'] = pd.to_datetime(oil['date'])
-    input_data['date'] = pd.to_datetime(input_data['date'])
-    input_data = pd.merge(input_data, oil, on='date', how='left')
-    input_data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
-else:
-    st.warning("'date' column not found in 'oil.csv'.")
+# Rename columns to match the model's expected feature names
+input_data.rename(columns={
+    'type': 'type_x',
+    'city': 'city_x',
+    'state': 'state_x',
+    'locale': 'locale_x',
+    'locale_name': 'locale_name_x'
+}, inplace=True)
+
+# Drop any columns not expected by the model
+input_data = input_data[[
+    'store_nbr', 'family', 'city_x', 'state_x', 'type_x', 'locale_x',
+    'locale_name_x', 'cluster', 'dcoilwtico', 'year', 'month', 'day', 
+    'dayofweek', 'is_weekend', 'is_holiday'
+]]
 
 # Encode categorical features
 le = LabelEncoder()
-categorical_cols = ['family',  'locale', 'locale_name']
+categorical_cols = ['family', 'locale_x', 'locale_name_x']
 for col in categorical_cols:
-    if col in input_data.columns:
-        input_data[col] = le.fit_transform(input_data[col])
-    else:
-        st.warning(f"'{col}' column not found in the input data.")
+    input_data[col] = le.fit_transform(input_data[col])
 
 # Create date features
 def create_date_features(df):
@@ -86,15 +85,12 @@ def create_date_features(df):
 input_data = create_date_features(input_data)
 
 # Incorporate holidays and events information
-if 'date' in holidays_events.columns:
-    holidays_events = holidays_events[holidays_events['transferred'] == 'False']
-    holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
-    holidays_events['is_holiday'] = 1
+holidays_events = holidays_events[holidays_events['transferred'] == 'False']
+holidays_events = holidays_events[['date', 'type', 'locale', 'locale_name']]
+holidays_events['is_holiday'] = 1
 
-    input_data = pd.merge(input_data, holidays_events, on=['date'], how='left')
-    input_data['is_holiday'].fillna(0, inplace=True)
-else:
-    st.warning("'date' column not found in 'holidays_events.csv'.")
+input_data = pd.merge(input_data, holidays_events, on=['date'], how='left')
+input_data['is_holiday'].fillna(0, inplace=True)
 
 # Ensure all columns are numerical
 input_data = input_data.apply(pd.to_numeric, errors='coerce')
@@ -131,12 +127,16 @@ if uploaded_file is not None:
         data['date'] = pd.to_datetime(data['date'])
         data = pd.merge(data, stores, on='store_nbr', how='left')
         data = pd.merge(data, oil, on='date', how='left')
-        data['dcoilwtico'].ffill(inplace=True)  # Updated fillna method
+        data['dcoilwtico'].ffill(inplace=True)
 
-        for col in categorical_cols:
-            if col in data.columns:
-                data[col] = le.fit_transform(data[col])
-        
+        data.rename(columns={
+            'type': 'type_x',
+            'city': 'city_x',
+            'state': 'state_x',
+            'locale': 'locale_x',
+            'locale_name': 'locale_name_x'
+        }, inplace=True)
+
         data = create_date_features(data)
         data = pd.merge(data, holidays_events, on=['date'], how='left')
         data['is_holiday'].fillna(0, inplace=True)
